@@ -1,5 +1,10 @@
 # Claude Code Manager
 
+[![CI](https://github.com/eyalev/claude-code-manager/workflows/CI/badge.svg)](https://github.com/eyalev/claude-code-manager/actions)
+[![Release](https://github.com/eyalev/claude-code-manager/workflows/Release/badge.svg)](https://github.com/eyalev/claude-code-manager/actions)
+[![Latest Release](https://img.shields.io/github/v/release/eyalev/claude-code-manager)](https://github.com/eyalev/claude-code-manager/releases/latest)
+[![License](https://img.shields.io/github/license/eyalev/claude-code-manager)](LICENSE)
+
 A powerful Rust CLI tool for managing [Claude Code](https://claude.ai/code) sessions through tmux. Solve the problem of no built-in API/CLI for Claude Code interactive control by providing comprehensive session management, message sending, and completion detection.
 
 ## Features
@@ -34,9 +39,45 @@ A powerful Rust CLI tool for managing [Claude Code](https://claude.ai/code) sess
 
 ## Installation
 
+### Pre-built Binaries (Recommended)
+
+Download the latest release for your platform from [GitHub Releases](https://github.com/eyalev/claude-code-manager/releases):
+
+#### Linux (x86_64)
+```bash
+# GNU libc version (most common)
+curl -L https://github.com/eyalev/claude-code-manager/releases/latest/download/claude-code-manager-linux-x86_64 -o ~/.local/bin/claude-code-manager
+chmod +x ~/.local/bin/claude-code-manager
+
+# Static musl version (no dependencies)
+curl -L https://github.com/eyalev/claude-code-manager/releases/latest/download/claude-code-manager-linux-x86_64-musl -o ~/.local/bin/claude-code-manager
+chmod +x ~/.local/bin/claude-code-manager
+```
+
+#### Linux (ARM64)
+```bash
+curl -L https://github.com/eyalev/claude-code-manager/releases/latest/download/claude-code-manager-linux-aarch64 -o ~/.local/bin/claude-code-manager
+chmod +x ~/.local/bin/claude-code-manager
+```
+
+#### macOS (Intel)
+```bash
+curl -L https://github.com/eyalev/claude-code-manager/releases/latest/download/claude-code-manager-macos-x86_64 -o ~/.local/bin/claude-code-manager
+chmod +x ~/.local/bin/claude-code-manager
+```
+
+#### macOS (Apple Silicon)
+```bash
+curl -L https://github.com/eyalev/claude-code-manager/releases/latest/download/claude-code-manager-macos-aarch64 -o ~/.local/bin/claude-code-manager
+chmod +x ~/.local/bin/claude-code-manager
+```
+
+#### Windows
+Download `claude-code-manager-windows-x86_64.exe` from the [latest release](https://github.com/eyalev/claude-code-manager/releases/latest) and place it in your PATH.
+
 ### From Source
 ```bash
-git clone https://github.com/YOUR_USERNAME/claude-code-manager.git
+git clone https://github.com/eyalev/claude-code-manager.git
 cd claude-code-manager
 cargo build --release
 ```
@@ -45,7 +86,7 @@ The binary will be available at `target/release/claude-code-manager`.
 
 ### Using Cargo
 ```bash
-cargo install --path .
+cargo install --git https://github.com/eyalev/claude-code-manager.git
 ```
 
 ## Quick Start
