@@ -201,15 +201,22 @@ Add this to your `~/.claude/settings.json` to enable hook-based completion detec
 ```json
 {
   "hooks": {
-    "stop": [
+    "Stop": [
       {
-        "type": "command",
-        "command": "mkdir -p /tmp/claude-code-manager && echo \"$(date -Iseconds)\" > \"/tmp/claude-code-manager/$(tmux display-message -p '#{session_name}' 2>/dev/null || echo 'unknown').done\""
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/bin/bash -c 'mkdir -p /tmp/claude-code-manager && echo \"$(date -Iseconds)\" > \"/tmp/claude-code-manager/$(tmux display-message -p \"#{session_name}\" 2>/dev/null || echo \"unknown\").done\"'"
+          }
+        ]
       }
     ]
   }
 }
 ```
+
+**Important**: The hook command uses explicit `/bin/bash -c` wrapper to avoid shell environment issues in tmux sessions.
 
 ### Session Management
 - Sessions are managed through tmux with automatic logging enabled
@@ -274,6 +281,8 @@ claude-code-manager config set skip-permissions false
 - Add the stop hook to `~/.claude/settings.json` for better detection
 - Increase timeout if operations take longer than expected
 - Check `/tmp/claude-code-manager/` for completion marker files
+- If hook fails with "spawn /bin/sh ENOENT", ensure the hook uses `/bin/bash -c` wrapper
+- Restart Claude Code after modifying settings.json for hooks to take effect
 
 ### Configuration Issues
 - Use `claude-code-manager config show` to verify current settings
