@@ -3,15 +3,18 @@ use std::path::PathBuf;
 use tracing::{debug, error, info};
 
 use crate::tmux::TmuxManager;
+use crate::Config;
 
 pub struct ClaudeCodeManager {
     tmux: TmuxManager,
+    config: Config,
 }
 
 impl ClaudeCodeManager {
-    pub fn new() -> Self {
+    pub fn new(config: Config) -> Self {
         Self {
             tmux: TmuxManager::new(),
+            config,
         }
     }
 
@@ -24,11 +27,11 @@ impl ClaudeCodeManager {
         info!("Starting Claude Code session: {}", session_name);
 
         // Create tmux session with Claude Code
-        let claude_command = if cfg!(debug_assertions) {
-            // For development, you might want to use a different command
+        let claude_command = if self.config.skip_permissions {
+            info!("WARNING: Starting Claude Code with --dangerously-skip-permissions");
             "claude-code --dangerously-skip-permissions"
         } else {
-            "claude-code --dangerously-skip-permissions"
+            "claude-code"
         };
 
         self.tmux.create_session(session_name, working_dir, Some(claude_command))?;

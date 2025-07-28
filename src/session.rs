@@ -6,6 +6,7 @@ use tracing::{debug, error, info, warn};
 
 use crate::claude::ClaudeCodeManager;
 use crate::tmux::TmuxManager;
+use crate::Config;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Session {
@@ -36,13 +37,15 @@ impl std::fmt::Display for SessionStatus {
 pub struct SessionManager {
     claude: ClaudeCodeManager,
     tmux: TmuxManager,
+    config: Config,
 }
 
 impl SessionManager {
-    pub fn new() -> Self {
+    pub fn new(config: Config) -> Self {
         Self {
-            claude: ClaudeCodeManager::new(),
+            claude: ClaudeCodeManager::new(config.clone()),
             tmux: TmuxManager::new(),
+            config,
         }
     }
 

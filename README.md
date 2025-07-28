@@ -1,185 +1,284 @@
 # Claude Code Manager
 
-A CLI tool to manage Claude Code sessions through tmux, providing programmatic control over Claude Code in interactive mode.
+A powerful Rust CLI tool for managing [Claude Code](https://claude.ai/code) sessions through tmux. Solve the problem of no built-in API/CLI for Claude Code interactive control by providing comprehensive session management, message sending, and completion detection.
 
-## Problem
+## Features
 
-Currently, there's no built-in API or CLI to control Claude Code when running in interactive mode. This makes it difficult to:
+### 🚀 Session Management
+- **Start**: Create new Claude Code sessions with custom names and working directories
+- **List**: View all active sessions with status information
+- **Attach**: Connect to existing sessions interactively
+- **Kill**: Terminate individual sessions or all sessions at once
 
-- Automate tasks with Claude Code
-- Monitor Claude Code execution programmatically  
-- Manage multiple concurrent Claude Code sessions
-- Integrate Claude Code into scripts and workflows
+### 💬 Message Handling
+- **Smart Sending**: Send messages to sessions with automatic completion detection
+- **Hybrid Detection**: Uses Claude Code stop hooks for reliable completion detection with heuristic fallback
+- **Default Sessions**: Automatically creates and manages default sessions for quick usage
 
-## Solution
+### 📋 History & Logging
+- **Automatic Logging**: All session activity logged via tmux pipe-pane
+- **History Viewing**: Review session history with configurable line limits
+- **Export**: Save session logs to files with optional ANSI code stripping
+- **Live Following**: Follow session output in real-time like `tail -f`
 
-Claude Code Manager uses tmux to spawn, monitor, and interact with Claude Code sessions. It provides:
+### ⚙️ Configuration Management
+- **Safe Defaults**: Secure by default (no dangerous permissions)
+- **CLI Config**: Easy configuration management with `config` subcommand
+- **Flexible Settings**: Configure permissions, timeouts, and session names
+- **Multiple Formats**: Boolean values accept `true/false`, `1/0`, `yes/no`, `on/off`
 
-- **Session Management**: Start, list, attach to, and kill Claude Code sessions
-- **Task Execution**: Send messages/tasks to Claude Code and monitor completion
-- **Process Monitoring**: Track session status and capture output
-- **Multi-session Support**: Manage multiple concurrent Claude Code instances
+### 🔒 Security
+- **Safe by Default**: Does not use `--dangerously-skip-permissions` by default
+- **Configurable**: Optional unsafe mode via CLI flag or config file
+- **Clear Warnings**: Shows warnings when running in unsafe mode
 
 ## Installation
 
 ### From Source
-
 ```bash
-git clone https://github.com/eyalev/claude-code-manager.git
+git clone https://github.com/YOUR_USERNAME/claude-code-manager.git
 cd claude-code-manager
 cargo build --release
-cp target/release/claude-code-manager ~/.local/bin/
 ```
 
-### From GitHub Releases
+The binary will be available at `target/release/claude-code-manager`.
 
-Download the latest release for your platform:
-
+### Using Cargo
 ```bash
-# Linux x86_64
-curl -L https://github.com/eyalev/claude-code-manager/releases/latest/download/claude-code-manager-linux-x86_64 -o ~/.local/bin/claude-code-manager
-chmod +x ~/.local/bin/claude-code-manager
-
-# macOS (Intel)
-curl -L https://github.com/eyalev/claude-code-manager/releases/latest/download/claude-code-manager-macos-x86_64 -o ~/.local/bin/claude-code-manager
-chmod +x ~/.local/bin/claude-code-manager
-
-# macOS (Apple Silicon)
-curl -L https://github.com/eyalev/claude-code-manager/releases/latest/download/claude-code-manager-macos-aarch64 -o ~/.local/bin/claude-code-manager
-chmod +x ~/.local/bin/claude-code-manager
+cargo install --path .
 ```
 
-## Prerequisites
+## Quick Start
 
-- **tmux**: Required for session management
-- **claude-code**: Must be installed and accessible in PATH
-- **Rust** (for building from source): Version 1.70 or later
+1. **Initialize configuration**:
+   ```bash
+   claude-code-manager config init
+   ```
+
+2. **Send a message to the default session**:
+   ```bash
+   claude-code-manager send "Hello, Claude!"
+   ```
+
+3. **List active sessions**:
+   ```bash
+   claude-code-manager list
+   ```
+
+4. **View session history**:
+   ```bash
+   claude-code-manager history claude-default
+   ```
 
 ## Usage
 
-### Start a New Session
+### Session Commands
 
+#### Start a New Session
 ```bash
-# Start a session with a task and wait for completion
-claude-code-manager start --message "Create a hello world Python script" --wait
+# Basic usage
+claude-code-manager start -m "Create a Python script"
 
-# Start a session in background
-claude-code-manager start --message "Analyze the codebase and create a report" --session-name "analysis-task"
+# With custom session name and working directory
+claude-code-manager start -m "Debug the app" -s debug-session -w /path/to/project
 
-# Start with custom working directory
-claude-code-manager start --message "Fix the failing tests" --working-dir /path/to/project --wait
+# Wait for completion and show results
+claude-code-manager start -m "Fix the bug" --wait
 ```
 
-### List Sessions
-
+#### Send Messages
 ```bash
+# Send to default session (creates if doesn't exist)
+claude-code-manager send "Write a test for this function"
+
+# Send to specific session
+claude-code-manager send "Review this code" -s my-session
+
+# Send without waiting for completion
+claude-code-manager send "Start the server" --no-wait
+```
+
+#### List and Manage Sessions
+```bash
+# List all active sessions
 claude-code-manager list
-```
 
-Output:
-```
-Active Claude Code sessions:
-  abc123def - analysis-task (active)
-  xyz789ghi - claude-1f2a3b4c (completed)
-```
+# Attach to a session (interactive)
+claude-code-manager attach my-session
 
-### Send Messages to Existing Sessions
-
-```bash
-# Send a message and continue in background
-claude-code-manager send abc123def "Now create unit tests for the script"
-
-# Send a message and wait for completion
-claude-code-manager send abc123def "Run the tests and fix any issues" --wait
-```
-
-### Check Session Status
-
-```bash
-# Get the last 50 lines of output
-claude-code-manager status abc123def
-
-# Get more output lines
-claude-code-manager status abc123def --lines 100
-```
-
-### Attach to a Session
-
-```bash
-# Attach to session for interactive use
-claude-code-manager attach analysis-task
-```
-
-### Kill Sessions
-
-```bash
 # Kill a specific session
-claude-code-manager kill abc123def
+claude-code-manager kill my-session
 
 # Kill all sessions
 claude-code-manager kill-all
 ```
 
-## Advanced Usage
-
-### Automation Example
-
+#### History and Status
 ```bash
-#!/bin/bash
-# Automated code review script
+# Get current session status
+claude-code-manager status my-session
 
-SESSION_ID=$(claude-code-manager start \
-  --message "Review all Python files in src/ directory for code quality issues" \
-  --working-dir $(pwd) \
-  --timeout 600)
+# View session history
+claude-code-manager history my-session
 
-echo "Started code review session: $SESSION_ID"
+# View last 100 lines
+claude-code-manager history my-session -l 100
 
-# Wait for initial analysis
-claude-code-manager send $SESSION_ID \
-  "Create a detailed report with findings and recommendations" --wait
+# Follow history in real-time
+claude-code-manager history my-session --follow
 
-# Get the results
-echo "Code review completed:"
-claude-code-manager status $SESSION_ID --lines 200
+# Export history to file
+claude-code-manager export my-session -o session.log
 
-# Clean up
-claude-code-manager kill $SESSION_ID
+# Export with clean text (no ANSI codes)
+claude-code-manager export my-session -o clean.txt --clean
 ```
 
-### Integration with Monitoring
+### Configuration Management
 
+#### View Configuration
 ```bash
-# Use with cron or monitoring systems
-claude-code-manager start \
-  --message "Check system health and generate report" \
-  --session-name "health-check-$(date +%Y%m%d-%H%M)" \
-  --wait --timeout 300
+# Show current configuration
+claude-code-manager config show
+
+# Get specific setting
+claude-code-manager config get skip-permissions
 ```
 
-## Configuration
+#### Modify Settings
+```bash
+# Enable unsafe mode (use with caution!)
+claude-code-manager config set skip-permissions true
 
-Claude Code Manager uses the following defaults:
+# Set custom timeout (in seconds)
+claude-code-manager config set default-timeout 600
 
-- **Timeout**: 300 seconds (5 minutes) for `--wait` operations
-- **Output Lines**: 50 lines for status command
-- **Session Naming**: Auto-generated names like `claude-abc123def`
+# Change default session name
+claude-code-manager config set default-session-name my-claude
 
-## Architecture
+# Disable unsafe mode (recommended)
+claude-code-manager config set skip-permissions false
+```
 
-The tool consists of several modules:
+#### Available Configuration Keys
+- `skip-permissions`: Enable/disable `--dangerously-skip-permissions` (boolean)
+- `default-timeout`: Default timeout for operations in seconds (number)
+- `default-session-name`: Default name for auto-created sessions (string)
 
-- **`tmux.rs`**: Low-level tmux session management
-- **`claude.rs`**: Claude Code process spawning and communication
-- **`session.rs`**: High-level session management and state tracking
-- **`main.rs`**: CLI interface and command handling
+### Global Options
 
-## Limitations
+```bash
+# Use custom config file
+claude-code-manager --config /path/to/config.json <command>
 
-- Requires tmux to be installed and functional
-- Claude Code completion detection is heuristic-based
-- Session state is maintained in memory (not persistent across restarts)
-- Linux/macOS only (Windows support via WSL)
+# Enable unsafe mode for single command (use with caution!)
+claude-code-manager --skip-permissions send "test message"
+```
+
+## Configuration File
+
+Configuration is stored in `~/.claude-code-manager/config.json`:
+
+```json
+{
+  "skip_permissions": false,
+  "default_timeout": 300,
+  "default_session_name": "claude-default"
+}
+```
+
+## How It Works
+
+### Completion Detection
+The tool uses a hybrid approach for detecting when Claude Code completes a task:
+
+1. **Primary (Hook-based)**: Uses Claude Code's stop hooks to create completion marker files
+2. **Fallback (Heuristic)**: Monitors output stability and looks for completion indicators
+
+### Claude Code Stop Hook
+Add this to your `~/.claude/settings.json` to enable hook-based completion detection:
+
+```json
+{
+  "hooks": {
+    "stop": [
+      {
+        "type": "command",
+        "command": "mkdir -p /tmp/claude-code-manager && echo \"$(date -Iseconds)\" > \"/tmp/claude-code-manager/$(tmux display-message -p '#{session_name}' 2>/dev/null || echo 'unknown').done\""
+      }
+    ]
+  }
+}
+```
+
+### Session Management
+- Sessions are managed through tmux with automatic logging enabled
+- Each session gets a unique log file in `~/.claude-code-manager/logs/`
+- Session persistence survives tool restarts and system reboots
+
+## Examples
+
+### Development Workflow
+```bash
+# Start a coding session
+claude-code-manager start -m "Help me build a REST API" -s api-dev -w ~/projects/api
+
+# Send follow-up messages
+claude-code-manager send "Add authentication middleware" -s api-dev
+claude-code-manager send "Write unit tests" -s api-dev
+
+# Review what happened
+claude-code-manager history api-dev -l 50
+
+# Export the session for documentation
+claude-code-manager export api-dev -o api-development-log.txt --clean
+```
+
+### Quick Tasks
+```bash
+# Quick one-off tasks using default session
+claude-code-manager send "Explain this error message: ImportError: No module named 'requests'"
+claude-code-manager send "Write a Python function to parse CSV files"
+claude-code-manager send "How do I configure nginx for reverse proxy?"
+```
+
+### Batch Operations
+```bash
+# Kill all sessions and start fresh
+claude-code-manager kill-all
+claude-code-manager send "Ready for new tasks"
+
+# Enable unsafe mode temporarily for operations requiring file access
+claude-code-manager config set skip-permissions true
+claude-code-manager send "Create a project structure in ~/new-project"
+claude-code-manager config set skip-permissions false
+```
+
+## Security Considerations
+
+⚠️ **Important**: This tool runs Claude Code with normal permissions by default. Only enable `skip-permissions` when you need Claude Code to perform actions that require elevated privileges.
+
+- **Safe by Default**: The tool defaults to `skip_permissions: false`
+- **Explicit Consent**: Unsafe mode must be explicitly enabled via config or CLI flag
+- **Clear Warnings**: Shows warnings when running in unsafe mode
+- **Easy Toggle**: Can quickly enable/disable unsafe mode through config commands
+
+## Troubleshooting
+
+### Sessions Not Starting
+- Ensure `claude-code` is in your PATH
+- Check if tmux is installed and accessible
+- Verify your Claude Code authentication
+
+### Completion Detection Issues
+- Add the stop hook to `~/.claude/settings.json` for better detection
+- Increase timeout if operations take longer than expected
+- Check `/tmp/claude-code-manager/` for completion marker files
+
+### Configuration Issues
+- Use `claude-code-manager config show` to verify current settings
+- Reset with `claude-code-manager config init` if configuration is corrupted
+- Check file permissions on `~/.claude-code-manager/`
 
 ## Contributing
 
@@ -191,13 +290,9 @@ The tool consists of several modules:
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## Changelog
+## Related
 
-### v0.1.0
-- Initial release
-- Basic session management (start, list, kill)
-- Message sending and completion waiting
-- Session attachment support
-- Status monitoring
+- [Claude Code Documentation](https://docs.anthropic.com/en/docs/claude-code)
+- [tmux Documentation](https://github.com/tmux/tmux/wiki)
