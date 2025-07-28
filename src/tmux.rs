@@ -119,6 +119,7 @@ impl TmuxManager {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn send_keys(&self, session_name: &str, keys: &str) -> Result<()> {
         debug!("Sending keys to tmux session {}: {}", session_name, keys);
 
@@ -135,6 +136,7 @@ impl TmuxManager {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn send_enter(&self, session_name: &str) -> Result<()> {
         debug!("Sending Enter to tmux session: {}", session_name);
 
@@ -146,6 +148,23 @@ impl TmuxManager {
             let stderr = String::from_utf8_lossy(&output.stderr);
             error!("Failed to send Enter to tmux session: {}", stderr);
             return Err(anyhow!("Failed to send Enter to tmux session: {}", stderr));
+        }
+
+        Ok(())
+    }
+
+    pub fn send_keys_with_enter(&self, session_name: &str, keys: &str) -> Result<()> {
+        debug!("Sending keys with Enter to tmux session {}: {}", session_name, keys);
+
+        // Send the keys and Enter in a single command to avoid timing issues
+        let output = Command::new("tmux")
+            .args(["send-keys", "-t", session_name, keys, "C-m"])
+            .output()?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            error!("Failed to send keys with Enter to tmux session: {}", stderr);
+            return Err(anyhow!("Failed to send keys with Enter to tmux session: {}", stderr));
         }
 
         Ok(())

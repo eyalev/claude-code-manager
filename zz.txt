@@ -1,0 +1,10 @@
+This is a sample file created for testing purposes.
+
+It contains some basic text content to demonstrate file creation.
+
+Sample data:
+- Item 1
+- Item 2
+- Item 3
+
+End of sample file.

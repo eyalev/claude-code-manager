@@ -53,14 +53,8 @@ impl ClaudeCodeManager {
             session_name, message
         );
 
-        // Send the message
-        self.tmux.send_keys(session_name, message)?;
-
-        // Wait a moment for the message to be processed
-        std::thread::sleep(std::time::Duration::from_millis(500));
-
-        // Send Enter to execute
-        self.tmux.send_enter(session_name)?;
+        // Send the message and Enter key together to avoid timing issues
+        self.tmux.send_keys_with_enter(session_name, message)?;
 
         info!("Message sent to Claude Code session: {}", session_name);
         Ok(())
