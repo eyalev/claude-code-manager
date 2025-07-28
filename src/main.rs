@@ -18,9 +18,13 @@ struct Config {
     #[serde(default = "default_timeout")]
     pub default_timeout: u64,
 
-    /// Default session name
+    /// Default session name (used when directory sessions are disabled)
     #[serde(default = "default_session_name")]
     pub default_session_name: String,
+
+    /// Use directory-based session names
+    #[serde(default = "default_use_directory_sessions")]
+    pub use_directory_sessions: bool,
 }
 
 impl Default for Config {
@@ -29,6 +33,7 @@ impl Default for Config {
             skip_permissions: false, // Safe by default
             default_timeout: 300,
             default_session_name: "claude-default".to_string(),
+            use_directory_sessions: true, // Enable by default
         }
     }
 }
@@ -39,6 +44,67 @@ fn default_timeout() -> u64 {
 
 fn default_session_name() -> String {
     "claude-default".to_string()
+}
+
+fn default_use_directory_sessions() -> bool {
+    true
+}
+
+fn generate_directory_session_name(current_dir: &std::path::Path) -> String {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    
+    // Get the full path as string
+    let path_str = current_dir.to_string_lossy();
+    
+    // Generate hash of the full path
+    let mut hasher = DefaultHasher::new();
+    path_str.hash(&mut hasher);
+    let hash = hasher.finish();
+    
+    // Get the last 2 directory components for the suffix
+    let components: Vec<_> = current_dir.components()
+        .filter_map(|c| match c {
+            std::path::Component::Normal(name) => Some(name.to_string_lossy()),
+            _ => None,
+        })
+        .collect();
+    
+    let suffix = if components.len() >= 2 {
+        format!("{}-{}", components[components.len()-2], components[components.len()-1])
+    } else if components.len() == 1 {
+        components[0].to_string()  
+    } else {
+        "root".to_string()
+    };
+    
+    // Sanitize suffix (replace non-alphanumeric with dashes, limit length)
+    let safe_suffix = suffix
+        .chars()
+        .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+        .collect::<String>()
+        .trim_matches('-')
+        .chars()
+        .take(30) // Limit suffix length
+        .collect::<String>();
+    
+    format!("claude-{:x}-{}", hash & 0xFFFFFF, safe_suffix) // Use 6 hex digits for hash
+}
+
+fn get_session_name_for_current_dir(config: &Config, explicit_session: Option<&str>) -> anyhow::Result<String> {
+    // If explicit session name provided, use it
+    if let Some(session) = explicit_session {
+        return Ok(session.to_string());
+    }
+    
+    // If directory sessions disabled, use default
+    if !config.use_directory_sessions {
+        return Ok(config.default_session_name.clone());
+    }
+    
+    // Generate directory-based session name
+    let current_dir = std::env::current_dir()?;
+    Ok(generate_directory_session_name(&current_dir))
 }
 
 fn load_config(config_path: Option<&PathBuf>) -> anyhow::Result<Config> {
@@ -119,9 +185,12 @@ async fn handle_config_command(
                 "default-session-name" | "default_session_name" => {
                     println!("{}", config.default_session_name);
                 }
+                "use-directory-sessions" | "use_directory_sessions" => {
+                    println!("{}", config.use_directory_sessions);
+                }
                 _ => {
                     return Err(anyhow::anyhow!(
-                        "Unknown config key: '{}'. Available keys: skip-permissions, default-timeout, default-session-name", 
+                        "Unknown config key: '{}'. Available keys: skip-permissions, default-timeout, default-session-name, use-directory-sessions", 
                         key
                     ));
                 }
@@ -169,9 +238,23 @@ async fn handle_config_command(
                         config.default_session_name
                     );
                 }
+                "use-directory-sessions" | "use_directory_sessions" => {
+                    let bool_value = match value.to_lowercase().as_str() {
+                        "true" | "1" | "yes" | "on" => true,
+                        "false" | "0" | "no" | "off" => false,
+                        _ => {
+                            return Err(anyhow::anyhow!(
+                                "Invalid boolean value '{}'. Use: true, false, 1, 0, yes, no, on, off",
+                                value
+                            ));
+                        }
+                    };
+                    config.use_directory_sessions = bool_value;
+                    println!("Set use-directory-sessions to: {}", config.use_directory_sessions);
+                }
                 _ => {
                     return Err(anyhow::anyhow!(
-                        "Unknown config key: '{}'. Available keys: skip-permissions, default-timeout, default-session-name", 
+                        "Unknown config key: '{}'. Available keys: skip-permissions, default-timeout, default-session-name, use-directory-sessions", 
                         key
                     ));
                 }
@@ -195,7 +278,7 @@ async fn handle_config_command(
 #[derive(Parser)]
 #[command(name = "claude-code-manager")]
 #[command(about = "A CLI tool to manage Claude Code sessions through tmux")]
-#[command(version = "0.1.0")]
+#[command(version)]
 struct Cli {
     /// Skip Claude Code permissions checks (UNSAFE - use with caution)
     #[arg(long, global = true)]
@@ -263,8 +346,9 @@ enum Commands {
 
     /// Get the status and output of a session
     Status {
-        /// Session name or ID
-        session: String,
+        /// Session name or ID (default: directory-based session)
+        #[arg(short, long)]
+        session: Option<String>,
 
         /// Number of lines to show from output (default: 50)
         #[arg(short, long, default_value = "50")]
@@ -273,8 +357,9 @@ enum Commands {
 
     /// Kill a Claude Code session
     Kill {
-        /// Session name or ID
-        session: String,
+        /// Session name or ID (default: directory-based session)
+        #[arg(short, long)]
+        session: Option<String>,
     },
 
     /// Kill all Claude Code sessions
@@ -282,8 +367,9 @@ enum Commands {
 
     /// View session history
     History {
-        /// Session name or ID
-        session: String,
+        /// Session name or ID (default: directory-based session)
+        #[arg(short, long)]
+        session: Option<String>,
 
         /// Number of lines to show (default: all)
         #[arg(short, long)]
@@ -296,8 +382,9 @@ enum Commands {
 
     /// Export session history to a file
     Export {
-        /// Session name or ID
-        session: String,
+        /// Session name or ID (default: directory-based session)
+        #[arg(short, long)]
+        session: Option<String>,
 
         /// Output file path
         #[arg(short, long)]
@@ -369,8 +456,15 @@ async fn main() -> anyhow::Result<()> {
             wait,
             timeout,
         } => {
+            // Determine session name and working directory
+            let session_name = get_session_name_for_current_dir(&config, session_name.as_deref())?;
+            let working_dir = working_dir.or_else(|| {
+                // If no explicit working dir, use current directory
+                std::env::current_dir().ok()
+            });
+            
             let session_name = session_manager
-                .start_session(message, session_name, working_dir)
+                .start_session(message, Some(session_name), working_dir)
                 .await?;
 
             println!("Started Claude Code session: {session_name}");
@@ -410,16 +504,17 @@ async fn main() -> anyhow::Result<()> {
             no_wait,
             timeout,
         } => {
-            let session_name = session.unwrap_or_else(|| config.default_session_name.clone());
+            let session_name = get_session_name_for_current_dir(&config, session.as_deref())?;
 
             // Ensure the default session exists
             if !session_manager.session_exists(&session_name).await? {
                 println!("Creating default Claude Code session...");
+                let working_dir = std::env::current_dir().ok();
                 session_manager
                     .start_session(
                         "Ready for commands".to_string(),
                         Some(session_name.clone()),
-                        None,
+                        working_dir,
                     )
                     .await?;
                 println!("Default session '{session_name}' created.");
@@ -442,14 +537,16 @@ async fn main() -> anyhow::Result<()> {
         }
 
         Commands::Status { session, lines } => {
-            let status = session_manager.get_session_status(&session, lines).await?;
-            println!("Session status for '{session}':");
+            let session_name = get_session_name_for_current_dir(&config, session.as_deref())?;
+            let status = session_manager.get_session_status(&session_name, lines).await?;
+            println!("Session status for '{session_name}':");
             println!("{status}");
         }
 
         Commands::Kill { session } => {
-            session_manager.kill_session(&session).await?;
-            println!("Killed session: {session}");
+            let session_name = get_session_name_for_current_dir(&config, session.as_deref())?;
+            session_manager.kill_session(&session_name).await?;
+            println!("Killed session: {session_name}");
         }
 
         Commands::KillAll => {
@@ -462,11 +559,12 @@ async fn main() -> anyhow::Result<()> {
             lines,
             follow,
         } => {
+            let session_name = get_session_name_for_current_dir(&config, session.as_deref())?;
             if follow {
-                session_manager.follow_session_history(&session).await?;
+                session_manager.follow_session_history(&session_name).await?;
             } else {
-                let history = session_manager.get_session_history(&session, lines).await?;
-                println!("Session history for '{session}':");
+                let history = session_manager.get_session_history(&session_name, lines).await?;
+                println!("Session history for '{session_name}':");
                 println!("{history}");
             }
         }
@@ -476,12 +574,12 @@ async fn main() -> anyhow::Result<()> {
             output,
             clean,
         } => {
+            let session_name = get_session_name_for_current_dir(&config, session.as_deref())?;
             session_manager
-                .export_session_history(&session, &output, clean)
+                .export_session_history(&session_name, &output, clean)
                 .await?;
             println!(
-                "Exported session '{}' history to: {}",
-                session,
+                "Exported session '{session_name}' history to: {}",
                 output.display()
             );
         }
