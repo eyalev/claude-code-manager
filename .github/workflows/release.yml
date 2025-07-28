@@ -4,266 +4,73 @@ on:
   push:
     tags:
       - 'v*'
-  workflow_dispatch:
-
-env:
-  CARGO_TERM_COLOR: always
 
 jobs:
   build:
-    name: Build ${{ matrix.target }}
+    name: Build
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false
       matrix:
         include:
-          # Linux
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            binary_name: claude-code-manager
+            artifact_name: claude-code-manager
             asset_name: claude-code-manager-linux-x86_64
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-musl
-            binary_name: claude-code-manager
-            asset_name: claude-code-manager-linux-x86_64-musl
-          - os: ubuntu-latest
-            target: aarch64-unknown-linux-gnu
-            binary_name: claude-code-manager
-            asset_name: claude-code-manager-linux-aarch64
-            cross: true
-          
-          # macOS
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact_name: claude-code-manager.exe
+            asset_name: claude-code-manager-windows-x86_64.exe
           - os: macos-latest
             target: x86_64-apple-darwin
-            binary_name: claude-code-manager
+            artifact_name: claude-code-manager
             asset_name: claude-code-manager-macos-x86_64
           - os: macos-latest
             target: aarch64-apple-darwin
-            binary_name: claude-code-manager
+            artifact_name: claude-code-manager
             asset_name: claude-code-manager-macos-aarch64
-          
-          # Windows
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            binary_name: claude-code-manager.exe
-            asset_name: claude-code-manager-windows-x86_64.exe
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Setup Rust
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
       uses: dtolnay/rust-toolchain@stable
       with:
         targets: ${{ matrix.target }}
-
-    - name: Install cross (if needed)
-      if: matrix.cross
-      run: cargo install cross --git https://github.com/cross-rs/cross
-
-    - name: Install musl tools (Linux musl)
-      if: matrix.target == 'x86_64-unknown-linux-musl'
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y musl-tools
-
-    - name: Cache cargo
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-          target
-        key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
-
-    - name: Build release binary
-      run: |
-        if [[ "${{ matrix.cross }}" == "true" ]]; then
-          cross build --release --target ${{ matrix.target }}
-        else
-          cargo build --release --target ${{ matrix.target }}
-        fi
-      shell: bash
-
-    - name: Strip binary (Unix)
-      if: matrix.os != 'windows-latest'
-      run: |
-        if [[ "${{ matrix.cross }}" == "true" ]]; then
-          # For cross-compiled binaries, we don't strip to avoid architecture mismatch
-          echo "Skipping strip for cross-compiled binary"
-        else
-          strip target/${{ matrix.target }}/release/${{ matrix.binary_name }}
-        fi
-      shell: bash
-
-    - name: Prepare binary
-      run: |
-        cp target/${{ matrix.target }}/release/${{ matrix.binary_name }} ${{ matrix.asset_name }}
-        chmod +x ${{ matrix.asset_name }} 2>/dev/null || true
-      shell: bash
-
-    - name: Upload binary
+    
+    - name: Build
+      run: cargo build --release --target ${{ matrix.target }}
+    
+    - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
         name: ${{ matrix.asset_name }}
-        path: ${{ matrix.asset_name }}
-        if-no-files-found: error
-
-  test:
-    name: Test Suite
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Setup Rust  
-      uses: dtolnay/rust-toolchain@stable
-
-    - name: Cache cargo
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-          target
-        key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
-
-    - name: Run tests
-      run: cargo test --verbose
-
-    - name: Run clippy
-      run: cargo clippy -- -D warnings
-
-    - name: Check formatting
-      run: cargo fmt -- --check
+        path: target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
 
   release:
-    name: Create Release
-    needs: [build, test]
+    name: Release
+    needs: build
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
-    permissions:
-      contents: write
-    
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
+    - uses: actions/checkout@v4
     
     - name: Download all artifacts
       uses: actions/download-artifact@v4
       with:
         path: artifacts
     
-    - name: Create release assets
+    - name: Prepare release assets
       run: |
-        mkdir -p release
-        for dir in artifacts/*/; do
-          if [ -d "$dir" ]; then
-            asset_name=$(basename "$dir")
-            file_path=$(find "$dir" -type f | head -1)
-            if [ -f "$file_path" ]; then
-              cp "$file_path" "release/$asset_name"
-              chmod +x "release/$asset_name" 2>/dev/null || true
-            fi
-          fi
-        done
-        ls -la release/
-
-    - name: Generate checksums
-      run: |
-        cd release
-        sha256sum * > SHA256SUMS
-        ls -la
+        mkdir -p release-assets
+        cp artifacts/claude-code-manager-linux-x86_64/claude-code-manager release-assets/claude-code-manager-linux-x86_64
+        cp artifacts/claude-code-manager-macos-x86_64/claude-code-manager release-assets/claude-code-manager-macos-x86_64
+        cp artifacts/claude-code-manager-macos-aarch64/claude-code-manager release-assets/claude-code-manager-macos-aarch64
+        cp artifacts/claude-code-manager-windows-x86_64.exe/claude-code-manager.exe release-assets/claude-code-manager-windows-x86_64.exe
+        chmod +x release-assets/claude-code-manager-*
     
-    - name: Generate release notes
-      id: release_notes
-      run: |
-        # Extract version from tag
-        VERSION=${GITHUB_REF#refs/tags/}
-        echo "version=$VERSION" >> $GITHUB_OUTPUT
-        
-        # Generate release notes with installation instructions
-        cat > release_notes.md << EOF
-        ## Installation
-        
-        Download the appropriate binary for your platform:
-        
-        ### Linux (x86_64)
-        \`\`\`bash
-        # GNU libc version (most common)
-        curl -L https://github.com/eyalev/claude-code-manager/releases/download/$VERSION/claude-code-manager-linux-x86_64 -o ~/.local/bin/claude-code-manager
-        chmod +x ~/.local/bin/claude-code-manager
-        
-        # Static musl version (no dependencies)
-        curl -L https://github.com/eyalev/claude-code-manager/releases/download/$VERSION/claude-code-manager-linux-x86_64-musl -o ~/.local/bin/claude-code-manager
-        chmod +x ~/.local/bin/claude-code-manager
-        \`\`\`
-        
-        ### Linux (ARM64)
-        \`\`\`bash
-        curl -L https://github.com/eyalev/claude-code-manager/releases/download/$VERSION/claude-code-manager-linux-aarch64 -o ~/.local/bin/claude-code-manager
-        chmod +x ~/.local/bin/claude-code-manager
-        \`\`\`
-        
-        ### macOS (Intel)
-        \`\`\`bash
-        curl -L https://github.com/eyalev/claude-code-manager/releases/download/$VERSION/claude-code-manager-macos-x86_64 -o ~/.local/bin/claude-code-manager
-        chmod +x ~/.local/bin/claude-code-manager
-        \`\`\`
-        
-        ### macOS (Apple Silicon)
-        \`\`\`bash
-        curl -L https://github.com/eyalev/claude-code-manager/releases/download/$VERSION/claude-code-manager-macos-aarch64 -o ~/.local/bin/claude-code-manager
-        chmod +x ~/.local/bin/claude-code-manager
-        \`\`\`
-        
-        ### Windows
-        Download \`claude-code-manager-windows-x86_64.exe\` and place it in your PATH.
-        
-        ## Requirements
-        
-        - **tmux**: Required for session management
-        - **claude-code**: Must be installed and accessible in PATH
-        
-        ## Quick Start
-        
-        \`\`\`bash
-        # Initialize configuration
-        claude-code-manager config init
-        
-        # Send a message to default session
-        claude-code-manager send "Hello, Claude!"
-        
-        # Start a new session with a task
-        claude-code-manager start -m "Create a Python script" --wait
-        
-        # List active sessions
-        claude-code-manager list
-        
-        # Get help
-        claude-code-manager --help
-        \`\`\`
-        
-        ## Checksums
-        
-        \`\`\`
-        EOF
-        cat release/SHA256SUMS >> release_notes.md
-        echo '```' >> release_notes.md
-    
-    - name: Create GitHub Release
-      uses: softprops/action-gh-release@v2
+    - name: Create release
+      uses: softprops/action-gh-release@v1
       with:
-        tag_name: ${{ steps.release_notes.outputs.version }}
-        name: Claude Code Manager ${{ steps.release_notes.outputs.version }}
-        body_path: release_notes.md
-        files: |
-          release/*
-          release/SHA256SUMS
-        draft: false
-        prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
-        generate_release_notes: false
+        files: release-assets/*
+        generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

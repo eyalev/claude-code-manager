@@ -270,12 +270,9 @@ impl SessionManager {
                 return Err(anyhow!("Failed to follow log file: {}", log_file));
             }
         } else {
-            println!(
-                "No log file found for session '{}'. Showing current content:",
-                session_name
-            );
+            println!("No log file found for session '{session_name}'. Showing current content:");
             let content = self.claude.get_claude_output(session_name, None)?;
-            println!("{}", content);
+            println!("{content}");
         }
 
         Ok(())

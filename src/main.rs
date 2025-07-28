@@ -373,7 +373,7 @@ async fn main() -> anyhow::Result<()> {
                 .start_session(message, session_name, working_dir)
                 .await?;
 
-            println!("Started Claude Code session: {}", session_name);
+            println!("Started Claude Code session: {session_name}");
 
             if wait {
                 println!("Waiting for completion...");
@@ -382,9 +382,9 @@ async fn main() -> anyhow::Result<()> {
                     .wait_for_completion(&session_name, timeout)
                     .await?;
                 println!("Session completed:");
-                println!("{}", result);
+                println!("{result}");
             } else {
-                println!("Session started in background. Use 'claude-code-manager attach {}' to connect.", session_name);
+                println!("Session started in background. Use 'claude-code-manager attach {session_name}' to connect.");
             }
         }
 
@@ -422,7 +422,7 @@ async fn main() -> anyhow::Result<()> {
                         None,
                     )
                     .await?;
-                println!("Default session '{}' created.", session_name);
+                println!("Default session '{session_name}' created.");
             }
 
             session_manager
@@ -430,31 +430,31 @@ async fn main() -> anyhow::Result<()> {
                 .await?;
 
             if no_wait {
-                println!("Message sent to session: {}", session_name);
+                println!("Message sent to session: {session_name}");
             } else {
                 println!("Waiting for completion...");
                 let timeout = timeout.unwrap_or(config.default_timeout);
                 let result = session_manager
                     .wait_for_completion(&session_name, timeout)
                     .await?;
-                println!("{}", result);
+                println!("{result}");
             }
         }
 
         Commands::Status { session, lines } => {
             let status = session_manager.get_session_status(&session, lines).await?;
-            println!("Session status for '{}':", session);
-            println!("{}", status);
+            println!("Session status for '{session}':");
+            println!("{status}");
         }
 
         Commands::Kill { session } => {
             session_manager.kill_session(&session).await?;
-            println!("Killed session: {}", session);
+            println!("Killed session: {session}");
         }
 
         Commands::KillAll => {
             let count = session_manager.kill_all_sessions().await?;
-            println!("Killed {} session(s)", count);
+            println!("Killed {count} session(s)");
         }
 
         Commands::History {
