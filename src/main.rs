@@ -50,17 +50,18 @@ enum Commands {
         session: String,
     },
     
-    /// Send a message to an existing session
+    /// Send a message to a session (creates default session if none specified)
     Send {
-        /// Session name or ID
-        session: String,
-        
         /// Message to send
         message: String,
         
-        /// Wait for completion and return results
+        /// Session name or ID (default: creates/uses 'claude-default')
         #[arg(short, long)]
-        wait: bool,
+        session: Option<String>,
+        
+        /// Don't wait for completion (default: wait)
+        #[arg(long)]
+        no_wait: bool,
         
         /// Timeout in seconds (default: 300)
         #[arg(short, long, default_value = "300")]
@@ -165,14 +166,27 @@ async fn main() -> anyhow::Result<()> {
             session_manager.attach_session(&session).await?;
         },
         
-        Commands::Send { session, message, wait, timeout } => {
-            session_manager.send_message(&session, &message).await?;
-            println!("Message sent to session: {}", session);
+        Commands::Send { message, session, no_wait, timeout } => {
+            let session_name = session.unwrap_or_else(|| "claude-default".to_string());
             
-            if wait {
+            // Ensure the default session exists
+            if !session_manager.session_exists(&session_name).await? {
+                println!("Creating default Claude Code session...");
+                session_manager.start_session(
+                    "Ready for commands".to_string(),
+                    Some(session_name.clone()),
+                    None,
+                ).await?;
+                println!("Default session '{}' created.", session_name);
+            }
+            
+            session_manager.send_message(&session_name, &message).await?;
+            
+            if no_wait {
+                println!("Message sent to session: {}", session_name);
+            } else {
                 println!("Waiting for completion...");
-                let result = session_manager.wait_for_completion(&session, timeout).await?;
-                println!("Response:");
+                let result = session_manager.wait_for_completion(&session_name, timeout).await?;
                 println!("{}", result);
             }
         },

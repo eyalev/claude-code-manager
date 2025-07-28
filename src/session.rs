@@ -105,6 +105,10 @@ impl SessionManager {
         Ok(sessions)
     }
 
+    pub async fn session_exists(&mut self, session_name: &str) -> Result<bool> {
+        Ok(self.tmux.session_exists(session_name)?)
+    }
+
     pub async fn send_message(&mut self, session_name: &str, message: &str) -> Result<()> {
         info!("Sending message to session {}: {}", session_name, message);
 
