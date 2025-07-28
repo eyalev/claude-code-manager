@@ -98,6 +98,54 @@ impl ClaudeCodeManager {
             session_name, timeout_secs
         );
 
+        // Try hook-based completion detection first
+        if let Ok(result) = self.wait_for_completion_hook(session_name, timeout_secs) {
+            return Ok(result);
+        }
+
+        info!("Hook-based completion detection failed, falling back to heuristics");
+        
+        // Fallback to old method if hook-based detection fails
+        self.wait_for_completion_heuristic(session_name, timeout_secs)
+    }
+
+    fn wait_for_completion_hook(&self, session_name: &str, timeout_secs: u64) -> Result<String> {
+        let start_time = std::time::Instant::now();
+        let timeout = std::time::Duration::from_secs(timeout_secs);
+        let check_interval = std::time::Duration::from_millis(500); // Check more frequently
+        
+        let completion_file = format!("/tmp/claude-code-manager/{}.done", session_name);
+        
+        // Remove any existing completion file to start fresh
+        let _ = std::fs::remove_file(&completion_file);
+        
+        info!("Monitoring completion file: {}", completion_file);
+        
+        loop {
+            if start_time.elapsed() > timeout {
+                return Err(anyhow!("Timeout waiting for Claude completion"));
+            }
+            
+            // Check if completion file exists
+            if std::path::Path::new(&completion_file).exists() {
+                info!("Completion detected via hook file: {}", completion_file);
+                
+                // Give Claude a moment to finish writing output after the hook fires
+                std::thread::sleep(std::time::Duration::from_millis(500));
+                
+                let final_output = self.get_claude_output(session_name, None)?;
+                
+                // Clean up the completion file
+                let _ = std::fs::remove_file(&completion_file);
+                
+                return Ok(final_output);
+            }
+            
+            std::thread::sleep(check_interval);
+        }
+    }
+
+    fn wait_for_completion_heuristic(&self, session_name: &str, timeout_secs: u64) -> Result<String> {
         let start_time = std::time::Instant::now();
         let timeout = std::time::Duration::from_secs(timeout_secs);
         let check_interval = std::time::Duration::from_secs(3);
@@ -183,21 +231,12 @@ impl ClaudeCodeManager {
             output.to_lowercase().contains(&indicator.to_lowercase())
         });
 
-        // Look for patterns that suggest Claude is waiting for new input
-        // This is more restrictive now - only consider complete if there's a clear prompt
-        let last_lines: Vec<&str> = output.lines().rev().take(3).collect();
-        let waiting_for_input = last_lines.iter().any(|line| {
-            let clean_line = line.trim();
-            // Look for empty prompt or clear end state
-            clean_line.is_empty() || 
-            clean_line == ">" ||
-            (clean_line.contains(">") && clean_line.len() < 10) || // Short prompt line
-            clean_line.contains("? for shortcuts") // Help text at bottom
-        });
-
-        // Only consider complete if we have clear indicators AND not working
-        (has_completion || has_error) || 
-        (waiting_for_input && !is_still_working && output.len() > 1000) // Ensure substantial content
+        // Only rely on stability detection for most cases
+        // Don't try to be too clever about detecting completion states
+        // since Claude Code UI can be complex and variable
+        
+        // Only use very clear completion indicators
+        has_completion || has_error
     }
 
     pub fn kill_claude_session(&self, session_name: &str) -> Result<()> {
