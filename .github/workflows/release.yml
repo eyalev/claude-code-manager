@@ -88,7 +88,13 @@ jobs:
     - name: Strip binary (Unix)
       if: matrix.os != 'windows-latest'
       run: |
-        strip target/${{ matrix.target }}/release/${{ matrix.binary_name }}
+        if [[ "${{ matrix.cross }}" == "true" ]]; then
+          # For cross-compiled binaries, we don't strip to avoid architecture mismatch
+          echo "Skipping strip for cross-compiled binary"
+        else
+          strip target/${{ matrix.target }}/release/${{ matrix.binary_name }}
+        fi
+      shell: bash
 
     - name: Prepare binary
       run: |

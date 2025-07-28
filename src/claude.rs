@@ -34,7 +34,8 @@ impl ClaudeCodeManager {
             "claude-code"
         };
 
-        self.tmux.create_session(session_name, working_dir, Some(claude_command))?;
+        self.tmux
+            .create_session(session_name, working_dir, Some(claude_command))?;
 
         // Wait for Claude to initialize
         info!("Waiting for Claude Code to initialize...");
@@ -47,14 +48,17 @@ impl ClaudeCodeManager {
     }
 
     pub fn send_message_to_claude(&self, session_name: &str, message: &str) -> Result<()> {
-        debug!("Sending message to Claude session {}: {}", session_name, message);
+        debug!(
+            "Sending message to Claude session {}: {}",
+            session_name, message
+        );
 
         // Send the message
         self.tmux.send_keys(session_name, message)?;
-        
+
         // Wait a moment for the message to be processed
         std::thread::sleep(std::time::Duration::from_millis(500));
-        
+
         // Send Enter to execute
         self.tmux.send_enter(session_name)?;
 
@@ -64,16 +68,17 @@ impl ClaudeCodeManager {
 
     pub fn get_claude_output(&self, session_name: &str, lines: Option<usize>) -> Result<String> {
         debug!("Getting Claude output from session: {}", session_name);
-        
+
         let output = self.tmux.capture_pane(session_name, lines)?;
         Ok(output)
     }
 
+    #[allow(dead_code)]
     pub fn is_claude_ready(&self, session_name: &str) -> Result<bool> {
         debug!("Checking if Claude is ready in session: {}", session_name);
-        
+
         let output = self.get_claude_output(session_name, Some(10))?;
-        
+
         // Look for Claude's prompt or ready indicators
         // This is a heuristic - you might need to adjust based on Claude Code's actual output
         let ready_indicators = [
@@ -83,9 +88,9 @@ impl ClaudeCodeManager {
             "I'm ready to help",
         ];
 
-        let is_ready = ready_indicators.iter().any(|indicator| {
-            output.to_lowercase().contains(&indicator.to_lowercase())
-        });
+        let is_ready = ready_indicators
+            .iter()
+            .any(|indicator| output.to_lowercase().contains(&indicator.to_lowercase()));
 
         debug!("Claude ready status for {}: {}", session_name, is_ready);
         Ok(is_ready)
@@ -107,7 +112,7 @@ impl ClaudeCodeManager {
         }
 
         info!("Hook-based completion detection failed, falling back to heuristics");
-        
+
         // Fallback to old method if hook-based detection fails
         self.wait_for_completion_heuristic(session_name, timeout_secs)
     }
@@ -116,39 +121,43 @@ impl ClaudeCodeManager {
         let start_time = std::time::Instant::now();
         let timeout = std::time::Duration::from_secs(timeout_secs);
         let check_interval = std::time::Duration::from_millis(500); // Check more frequently
-        
-        let completion_file = format!("/tmp/claude-code-manager/{}.done", session_name);
-        
+
+        let completion_file = format!("/tmp/claude-code-manager/{session_name}.done");
+
         // Remove any existing completion file to start fresh
         let _ = std::fs::remove_file(&completion_file);
-        
+
         info!("Monitoring completion file: {}", completion_file);
-        
+
         loop {
             if start_time.elapsed() > timeout {
                 return Err(anyhow!("Timeout waiting for Claude completion"));
             }
-            
+
             // Check if completion file exists
             if std::path::Path::new(&completion_file).exists() {
                 info!("Completion detected via hook file: {}", completion_file);
-                
+
                 // Give Claude a moment to finish writing output after the hook fires
                 std::thread::sleep(std::time::Duration::from_millis(500));
-                
+
                 let final_output = self.get_claude_output(session_name, None)?;
-                
+
                 // Clean up the completion file
                 let _ = std::fs::remove_file(&completion_file);
-                
+
                 return Ok(final_output);
             }
-            
+
             std::thread::sleep(check_interval);
         }
     }
 
-    fn wait_for_completion_heuristic(&self, session_name: &str, timeout_secs: u64) -> Result<String> {
+    fn wait_for_completion_heuristic(
+        &self,
+        session_name: &str,
+        timeout_secs: u64,
+    ) -> Result<String> {
         let start_time = std::time::Instant::now();
         let timeout = std::time::Duration::from_secs(timeout_secs);
         let check_interval = std::time::Duration::from_secs(3);
@@ -164,7 +173,7 @@ impl ClaudeCodeManager {
             }
 
             let current_output = self.get_claude_output(session_name, None)?;
-            
+
             if current_output == last_output {
                 stable_count += 1;
                 if stable_count >= stability_threshold {
@@ -190,54 +199,42 @@ impl ClaudeCodeManager {
         // Check if Claude is still actively working
         let still_working_indicators = [
             "Wibbling…",
-            "Synthesizing…", 
+            "Synthesizing…",
             "Writing…",
             "Thinking…",
             "Processing…",
-            "⚒ 0 tokens", // Still starting
+            "⚒ 0 tokens",       // Still starting
             "esc to interrupt", // Still working
         ];
 
         // If Claude is still working, definitely not complete
-        let is_still_working = still_working_indicators.iter().any(|indicator| {
-            output.contains(indicator)
-        });
+        let is_still_working = still_working_indicators
+            .iter()
+            .any(|indicator| output.contains(indicator));
 
         if is_still_working {
             return false;
         }
 
         // Look for clear completion indicators
-        let completion_indicators = [
-            "Task completed",
-            "Done!",
-            "Finished",
-            "✅",
-            "✓",
-        ];
+        let completion_indicators = ["Task completed", "Done!", "Finished", "✅", "✓"];
 
         // Look for error indicators
-        let error_indicators = [
-            "Error:",
-            "Failed:",
-            "❌",
-            "✗",
-            "Exception:",
-        ];
+        let error_indicators = ["Error:", "Failed:", "❌", "✗", "Exception:"];
 
         // Check if it looks like Claude finished (either success or error)
-        let has_completion = completion_indicators.iter().any(|indicator| {
-            output.to_lowercase().contains(&indicator.to_lowercase())
-        });
+        let has_completion = completion_indicators
+            .iter()
+            .any(|indicator| output.to_lowercase().contains(&indicator.to_lowercase()));
 
-        let has_error = error_indicators.iter().any(|indicator| {
-            output.to_lowercase().contains(&indicator.to_lowercase())
-        });
+        let has_error = error_indicators
+            .iter()
+            .any(|indicator| output.to_lowercase().contains(&indicator.to_lowercase()));
 
         // Only rely on stability detection for most cases
         // Don't try to be too clever about detecting completion states
         // since Claude Code UI can be complex and variable
-        
+
         // Only use very clear completion indicators
         has_completion || has_error
     }
@@ -249,17 +246,17 @@ impl ClaudeCodeManager {
 
     pub fn list_claude_sessions(&self) -> Result<Vec<String>> {
         debug!("Listing Claude Code sessions");
-        
+
         let all_sessions = self.tmux.list_sessions()?;
-        
+
         // Filter for sessions that are likely Claude Code sessions
         // This is a heuristic - you might want to adjust based on your naming convention
         let claude_sessions: Vec<String> = all_sessions
             .into_iter()
             .filter(|session| {
-                session.starts_with("claude-") || 
-                session.contains("claude") ||
-                self.is_claude_session(session).unwrap_or(false)
+                session.starts_with("claude-")
+                    || session.contains("claude")
+                    || self.is_claude_session(session).unwrap_or(false)
             })
             .collect();
 
@@ -270,16 +267,11 @@ impl ClaudeCodeManager {
         // Try to get a small sample of the session output to determine if it's Claude
         match self.get_claude_output(session_name, Some(5)) {
             Ok(output) => {
-                let claude_indicators = [
-                    "claude-code",
-                    "Claude",
-                    "How can I help",
-                    "I'm Claude",
-                ];
-                
-                Ok(claude_indicators.iter().any(|indicator| {
-                    output.to_lowercase().contains(&indicator.to_lowercase())
-                }))
+                let claude_indicators = ["claude-code", "Claude", "How can I help", "I'm Claude"];
+
+                Ok(claude_indicators
+                    .iter()
+                    .any(|indicator| output.to_lowercase().contains(&indicator.to_lowercase())))
             }
             Err(_) => Ok(false),
         }

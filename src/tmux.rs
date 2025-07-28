@@ -12,7 +12,7 @@ impl TmuxManager {
 
     pub fn session_exists(&self, session_name: &str) -> Result<bool> {
         debug!("Checking if tmux session exists: {}", session_name);
-        
+
         let output = Command::new("tmux")
             .args(["has-session", "-t", session_name])
             .output()?;
@@ -22,7 +22,7 @@ impl TmuxManager {
 
     pub fn list_sessions(&self) -> Result<Vec<String>> {
         debug!("Listing tmux sessions");
-        
+
         let output = Command::new("tmux")
             .args(["list-sessions", "-F", "#{session_name}"])
             .output()?;
@@ -85,12 +85,12 @@ impl TmuxManager {
         }
 
         info!("Successfully created tmux session: {}", session_name);
-        
+
         // Enable logging if requested
         if enable_logging {
             self.enable_session_logging(session_name)?;
         }
-        
+
         Ok(())
     }
 
@@ -105,7 +105,10 @@ impl TmuxManager {
             let stderr = String::from_utf8_lossy(&output.stderr);
             // Don't error if session doesn't exist
             if stderr.contains("no server running") || stderr.contains("session not found") {
-                debug!("Session {} doesn't exist or no tmux server running", session_name);
+                debug!(
+                    "Session {} doesn't exist or no tmux server running",
+                    session_name
+                );
                 return Ok(());
             }
             error!("Failed to kill tmux session: {}", stderr);
@@ -155,7 +158,7 @@ impl TmuxManager {
         cmd.args(["capture-pane", "-t", session_name, "-p"]);
 
         if let Some(lines) = lines {
-            cmd.args(["-S", &format!("-{}", lines)]);
+            cmd.args(["-S", &format!("-{lines}")]);
         }
 
         let output = cmd.output()?;
@@ -163,7 +166,10 @@ impl TmuxManager {
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             error!("Failed to capture pane from tmux session: {}", stderr);
-            return Err(anyhow!("Failed to capture pane from tmux session: {}", stderr));
+            return Err(anyhow!(
+                "Failed to capture pane from tmux session: {}",
+                stderr
+            ));
         }
 
         let content = String::from_utf8(output.stdout)?;
@@ -179,12 +185,16 @@ impl TmuxManager {
 
         if !output.success() {
             error!("Failed to attach to tmux session: {}", session_name);
-            return Err(anyhow!("Failed to attach to tmux session: {}", session_name));
+            return Err(anyhow!(
+                "Failed to attach to tmux session: {}",
+                session_name
+            ));
         }
 
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn get_session_info(&self, session_name: &str) -> Result<SessionInfo> {
         debug!("Getting session info for: {}", session_name);
 
@@ -194,7 +204,7 @@ impl TmuxManager {
                 "-t",
                 session_name,
                 "-p",
-                "#{session_name}:#{session_created}:#{session_windows}:#{session_attached}"
+                "#{session_name}:#{session_created}:#{session_windows}:#{session_attached}",
             ])
             .output()?;
 
@@ -221,42 +231,49 @@ impl TmuxManager {
 
     pub fn enable_session_logging(&self, session_name: &str) -> Result<()> {
         debug!("Enabling logging for tmux session: {}", session_name);
-        
+
         let log_dir = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-        let log_file = format!("{}/.claude-code-manager/logs/{}.log", log_dir, session_name);
-        
+        let log_file = format!("{log_dir}/.claude-code-manager/logs/{session_name}.log");
+
         // Create log directory if it doesn't exist
         if let Some(parent) = std::path::Path::new(&log_file).parent() {
             std::fs::create_dir_all(parent)?;
         }
-        
+
         // Enable tmux logging for the session
         let output = Command::new("tmux")
             .args([
-                "pipe-pane", 
-                "-t", session_name, 
-                &format!("cat >> '{}'", log_file)
+                "pipe-pane",
+                "-t",
+                session_name,
+                &format!("cat >> '{log_file}'"),
             ])
             .output()?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             error!("Failed to enable logging for tmux session: {}", stderr);
-            return Err(anyhow!("Failed to enable logging for tmux session: {}", stderr));
+            return Err(anyhow!(
+                "Failed to enable logging for tmux session: {}",
+                stderr
+            ));
         }
 
-        info!("Enabled logging for session {} to: {}", session_name, log_file);
+        info!(
+            "Enabled logging for session {} to: {}",
+            session_name, log_file
+        );
         Ok(())
     }
 
     pub fn get_log_file_path(&self, session_name: &str) -> String {
         let log_dir = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-        format!("{}/.claude-code-manager/logs/{}.log", log_dir, session_name)
+        format!("{log_dir}/.claude-code-manager/logs/{session_name}.log")
     }
 
     pub fn read_session_log(&self, session_name: &str, lines: Option<usize>) -> Result<String> {
         let log_file = self.get_log_file_path(session_name);
-        
+
         if !std::path::Path::new(&log_file).exists() {
             debug!("Log file does not exist for session: {}", session_name);
             // Fall back to capturing current pane content
@@ -264,17 +281,17 @@ impl TmuxManager {
         }
 
         debug!("Reading log file: {}", log_file);
-        
+
         if let Some(lines) = lines {
             // Read only the last N lines
             let output = Command::new("tail")
                 .args(["-n", &lines.to_string(), &log_file])
                 .output()?;
-                
+
             if !output.status.success() {
                 return Err(anyhow!("Failed to read log file: {}", log_file));
             }
-            
+
             Ok(String::from_utf8(output.stdout)?)
         } else {
             // Read entire file
@@ -284,6 +301,7 @@ impl TmuxManager {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct SessionInfo {
     pub name: String,
     pub created: u64,
