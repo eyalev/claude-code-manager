@@ -466,8 +466,8 @@ async fn main() -> anyhow::Result<()> {
                 session_manager.follow_session_history(&session).await?;
             } else {
                 let history = session_manager.get_session_history(&session, lines).await?;
-                println!("Session history for '{}':", session);
-                println!("{}", history);
+                println!("Session history for '{session}':");
+                println!("{history}");
             }
         }
 
